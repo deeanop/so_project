@@ -109,7 +109,7 @@ void dir_parse(char *dir_name) {
                     close(pfd[0]);
                     printf("Fisierul cu calea %s este potential periculos.\n", path);
                         char command[5000];
-                        sprintf(command, "./test1.sh ~/%s", path);
+                        sprintf(command, "./test.sh ~/%s", path);
                         value=system(command);
                         if(value==1){
                             strcpy(msg, "SAFE");
@@ -194,4 +194,4 @@ int main(int argc, char **argv){
     return 0;
 }
 //versiunea finala
-//aici am adaugat pipe-urile si am modificat comanda care apeleaza shell-scriptul
+//am modificat numele script-ului ce va fi apelat
