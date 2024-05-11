@@ -47,8 +47,17 @@ void compar(char a[][2000], char b[][2000], int k) {
 }
 
 void dir_parse(char *dir_name) {
+    int pfd[2];
+    pid_t pid_s;
+    char msg[10], msgr[10];
     char line[MAX_LINE_LENGTH];
+    int value;
     DIR *dir = opendir(dir_name);
+    if(pipe(pfd)<0){
+        perror("ERoare la crearea pipe-ului");
+        exit(EXIT_FAILURE);
+    }
+
     if (dir == NULL) {
         perror("Eroare la deschiderea directorului");
         exit(EXIT_FAILURE);
@@ -91,21 +100,50 @@ void dir_parse(char *dir_name) {
             strcpy(b[k], path);
             k++;
             if (!(buff.st_mode & S_IRUSR) && !(buff.st_mode & S_IRGRP) && !(buff.st_mode & S_IROTH) && !(buff.st_mode & S_IWUSR) && !(buff.st_mode & S_IWGRP) && !(buff.st_mode & S_IWOTH) && !(buff.st_mode & S_IXUSR) && !(buff.st_mode & S_IXGRP) && !(buff.st_mode & S_IXOTH)) {
-                pid_t pid_s = fork();
+                pid_s = fork();
                 if (pid_s < 0) {
                     perror("Eroare la crearea procesului pentru verificarea fisierului");
                     exit(EXIT_FAILURE);
                 }
                 if (pid_s == 0) {
+                    close(pfd[0]);
                     printf("Fisierul cu calea %s este potential periculos.\n", path);
                         char command[5000];
-                        sprintf(command, "./test.sh ~/%s %s", path, mal_dir);
-                        system(command);
+                        sprintf(command, "./test1.sh ~/%s", path);
+                        value=system(command);
+                        if(value==1){
+                            strcpy(msg, "SAFE");
+                            write(pfd[1], msg, strlen(msg));
+                            close(pfd[1]);
+                        }else{
+                            strcpy(msg, d->d_name);
+                            write(pfd[1], msg, strlen(msg));
+                            close(pfd[1]);
+                        }
                         exit(EXIT_SUCCESS);
                     }
                 } else {
-                    wait(NULL);
+                    close(pfd[1]); // Închide capătul de scriere al pipe-ului în procesul părinte
+                    read(pfd[0], msgr, sizeof(msgr)); // Citirea mesajului din pipe
+
+                    if (strcmp(msgr, "SAFE") == 0) {
+                        printf("Fisierul este sigur.\n");
+                    } else {
+                        printf("Fisierul %s nu este sigur.\n", msgr);
+                        if (rename(path, mal_dir) == 0) {
+                            printf("Fisierul a fost izolat.\n");
+                        } else {
+                            printf("Nu se poate izola fisierul.\n");
+                        }
+                    }
+
+                close(pfd[0]); // Închide capătul de citire al pipe-ului în procesul părinte
+
+                int status;
+                waitpid(pid_s, &status, WCONTINUED);
+                printf("Procesul fiu de izolare cu pid-ul %d s-a finalizat cu codul %d.\n", pid_s, status);
             }
+
         }
     }
     k=0;
@@ -127,7 +165,7 @@ int main(int argc, char **argv){
     pid_t pid;
     int i;
     for (i = 1; i < argc-2; i++) {
-        pid=fork();  //pentru fiecare director dat ca argument creem un nou proces
+        pid=fork();  //pentru fiecare director dat ca argument cream un nou proces
         if(pid<0){
             perror("Eroare la crearea procesului");
             exit(-1);
@@ -155,4 +193,5 @@ int main(int argc, char **argv){
     }
     return 0;
 }
-//aici am facut mici ajustari la caile fisierelor de analizat si la directorul pentru fisiere malitioase
+//versiunea finala
+//aici am adaugat pipe-urile si am modificat comanda care apeleaza shell-scriptul
