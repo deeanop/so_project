@@ -1,5 +1,4 @@
 
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -18,8 +17,35 @@
 #define MAX_FILENAME_LENGTH 20 //dimensiunea maxima a unei denumiri de fisier
 #define MAX_LINE_LENGTH 5000  //dimensiunea maxima a unei linii ce va fi transferata catre fisierele de snapshot finale
 int fd,fdr;  //variabile pentru a memora descriptoarele de fisier
+int k;
 char mal_dir[30];
 char target_path[1024];
+char a[100][2000];
+char b[100][2000];
+void compar(char a[][2000], char b[][2000], int k) {
+    int i=0,j=0;
+    if (a[0][0] != '\0') {
+        while(i<k && j<k) {
+            if (strcmp(a[i], b[j]) != 0 && strcmp(a[i], b[j++]) == 0){
+                printf("A fost sters fisierul cu calea %s\n", a[i]);
+                i++;
+            }
+            else {
+                if (strcmp(a[i], b[j]) != 0 && strcmp(a[i++], b[j]) == 0){
+                    printf("A fost adaugat fisierul cu calea %s\n", b[i]);
+                    j++;
+                }
+                else{
+                    if(strcmp(a[i], b[j])!=0 && strcmp(a[i+1], b[j+1])==0)
+                        printf("Fisierul cu calea %s a fost redenumit sau inlocuit cu fisierul cu calea %s", a[i], b[i]);
+                }
+            }
+        }
+    }
+    for(i=0;i<k;i++)
+        strcpy(a[i], b[i]);
+}
+
 void dir_parse(char *dir_name) {
     char line[MAX_LINE_LENGTH];
     DIR *dir = opendir(dir_name);
@@ -46,6 +72,8 @@ void dir_parse(char *dir_name) {
         if (S_ISDIR(buff.st_mode)) {
             printf("Fisierul cu calea %s este director\n", path);
             dir_parse(path);
+            strcpy(b[k], path);
+            k++;
         } else if (S_ISLNK(buff.st_mode)) {
             char target_path[PATH_MAX];
             ssize_t len = readlink(path, target_path, sizeof(target_path) - 1);
@@ -56,8 +84,12 @@ void dir_parse(char *dir_name) {
                 perror("Eroare la citirea legaturii simbolice");
                 exit(EXIT_FAILURE);
             }
+            strcpy(b[k], path);
+            k++;
         } else {
             printf("Fisierul cu calea %s este un fisier obisnuit\n", path);
+            strcpy(b[k], path);
+            k++;
             if (!(buff.st_mode & S_IRUSR) && !(buff.st_mode & S_IRGRP) && !(buff.st_mode & S_IROTH) && !(buff.st_mode & S_IWUSR) && !(buff.st_mode & S_IWGRP) && !(buff.st_mode & S_IWOTH) && !(buff.st_mode & S_IXUSR) && !(buff.st_mode & S_IXGRP) && !(buff.st_mode & S_IXOTH)) {
                 pid_t pid_s = fork();
                 if (pid_s < 0) {
@@ -67,7 +99,7 @@ void dir_parse(char *dir_name) {
                 if (pid_s == 0) {
                     printf("Fisierul cu calea %s este potential periculos.\n", path);
                         char command[5000];
-                        sprintf(command, "./test.sh %s %s", path, mal_dir);
+                        sprintf(command, "./test.sh ~/%s %s", path, mal_dir);
                         system(command);
                         exit(EXIT_SUCCESS);
                     }
@@ -76,6 +108,7 @@ void dir_parse(char *dir_name) {
             }
         }
     }
+    k=0;
     closedir(dir);
 }
 
@@ -112,8 +145,9 @@ int main(int argc, char **argv){
         	}
         }
     }
+    compar(a,b,k);
     if(strcmp(argv[argc-2],"-s")==0)
-        strcpy(mal_dir, argv[argc-1]);
+        sprintf(mal_dir, "~/%s", argv[argc-1]);
     valid=close(fd); //inchiderea fisierului initial
     if(valid==-1){
         perror("NoFileOpen");
@@ -121,5 +155,4 @@ int main(int argc, char **argv){
     }
     return 0;
 }
-//aici am rezolvat problema proceselor, dar si pe cea a scrierii incorecte in snapshot
-//voi atasa si shell-script-ul asociat
+//aici am facut mici ajustari la caile fisierelor de analizat si la directorul pentru fisiere malitioase
