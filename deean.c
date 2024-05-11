@@ -11,8 +11,7 @@
 
 #define MAX_FILENAME_LENGTH 20
 #define MAX_LINE_LENGTH 200
-
-FILE *f = NULL;
+int fd,fdr;
 
 void dir_parse(char *dir_name) {
     DIR *dir = opendir(dir_name);
@@ -34,69 +33,91 @@ void dir_parse(char *dir_name) {
             perror("Eroare la găsirea stării fișierului");
             exit(EXIT_FAILURE);
         }
-
-        fprintf(f, "Nume: %s\n", d->d_name);
-        fprintf(f, "Dimensiune: %ld bytes\n", buff.st_size);
-        fprintf(f, "Ultima modificare: %s", ctime(&buff.st_mtime));
-        fprintf(f, "Permisiuni: %o\n", buff.st_mode & 0777);
-        fprintf(f, "Număr i-node: %ld\n", buff.st_ino);
+        int valid;
+        valid=write(fd, d->d_name, strlen(d->d_name));
+        if(valid!=strlen(d->d_name))
+            exit(-1);
+        valid=write(fd, &buff.st_size,sizeof(off_t));
+        if(valid!=sizeof(off_t))
+            exit(-1);
+        valid=write(fd, ctime(&buff.st_mtime), strlen(ctime(&buff.st_mtime)));
+        if(valid!=strlen(ctime(&buff.st_mtime)))
+                exit(-1);
+        valid=write(fd, &buff.st_mode, sizeof(mode_t));
+        if(valid!=sizeof(mode_t))
+            exit(-1);
+        valid=write(fd, &buff.st_ino, sizeof(ino_t));
+        if(valid!=sizeof(ino_t))
+            exit(-1);
 
         if (S_ISDIR(buff.st_mode)) {
-            fprintf(f, "Este director\n");
+            printf("Este director\n");
             dir_parse(path);
         } else {
-            fprintf(f, "Este fișier\n");
+            printf("Este fișier\n");
         }
     }
     closedir(dir);
 }
 
 int main(int argc, char **argv) {
-    FILE *r = NULL;
     if (argc > 11) {
         perror("TooManyDirectories");
         exit(EXIT_FAILURE);
     }
-    f = fopen("snapshot1.txt", "w+");
-    if (f == NULL) {
+    int valid;
+    fd=open("snapshot.txt", O_WRONLY | O_CREAT | O_TRUNC);
+    if (fd == -1) {
         perror("NoFileOpen");
         exit(EXIT_FAILURE);
     }
-
-    fprintf(f, "*\n");
+    char f[5]="*\n";
+    valid=write(fd,f, strlen(f));
+    if(valid!=strlen(f))
+        exit(-1);
     for (int i = 1; i < argc; i++) {
         dir_parse(argv[i]);
-        fprintf(f, "*\n");
+        valid=write(fd, f, strlen(f));
+        if(valid!=strlen(f))
+            exit(-1);
     }
 
-    rewind(f); // Resetăm cursorul la începutul fișierului
-
+    valid=lseek(fd, SEEK_SET, 0); // Resetăm cursorul la începutul fișierului
+    if(valid==-1)
+        exit(-1);
     int i = 0;
     char line[MAX_LINE_LENGTH];
     char filename[MAX_FILENAME_LENGTH];
-    while (fgets(line, sizeof(line), f) != NULL) {
+    while(valid=read(fd, line, sizeof(line))){
+        if(valid!=sizeof(line))
+            exit(-1);
         if (line[0] == '*') {
-            snprintf(filename, sizeof(filename), "file%d.txt", i);
-            r = fopen(filename, "w");
-            if (r == NULL) {
+            strcpy(filename, "file%d.txt");
+            fdr = open(filename, O_WRONLY | O_CREAT | O_TRUNC);
+            if (fdr == -1) {
                 perror("FileNotOpen");
                 exit(EXIT_FAILURE);
             }
             i++;
         } else {
-            fprintf(r, "%s", line);
-        }
-
-        // Verificăm dacă suntem la sfârșitul fișierului
-        if (feof(f)) {
-            break;
+            valid=write(fdr, line, strlen(line));
+            if(valid!=strlen(line))
+                exit(-1);
         }
     }
-    if (r != NULL) {
-        fclose(r);
+    if (fdr != -1) {
+        valid=close(fdr);
+        if(valid==-1){
+            perror("NoFileClosed");
+            exit(-1);
+        }
     }
-    fclose(f);
+    valid=close(fd);
+    if(valid==-1){
+        perror("NoFileOpen");
+        exit(-1);
+    }
 
     return 0;
 }
-//nici aici nu am folosit inca apeluri sistem, dar am extins functionalitatea pentru a analiza mai multe directoare trimise in linia de comanda
+//aici am folosit apeluri sistem, dar mai este de lucru la modul in care datele sunt scrise in snapshot
